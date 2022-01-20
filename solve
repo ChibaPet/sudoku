@@ -1,0 +1,416 @@
+#!/usr/bin/perl
+# $Id: solve,v 1.6 2005/11/12 23:49:33 mason Exp $ use
+
+use strict;
+use warnings;
+
+my $verbose;
+my $bound = 9;
+
+my $puzzle = load_puzzle(@ARGV);
+
+print_grid($puzzle, "\nInitial grid:\n");
+
+my $missing = solve($puzzle);
+
+if ($missing == 0) {
+    print_grid($puzzle, "Completed grid:\n");
+} else {
+    print_grid($puzzle, "Incomplete grid:\n");
+    print "Ambiguity in puzzle found - refusing to guess. ",
+            "Still missing: $missing\n";
+}
+
+
+# XXX yeah, this is still bad - I'll fix it later
+sub appears_in_block
+{
+    my $grid = shift;
+    my $digit = shift;
+    my $x = shift;
+    my $y = shift;
+
+    my @potentials;
+    my $xmax;
+    my $xmin;
+    my $ymax;
+    my $ymin;
+
+    if ($x < 3) {
+        $xmin = 0;
+        $xmax = 2;
+    } elsif ($x < 6) {
+        $xmin = 3;
+        $xmax = 5;
+    } else {
+        $xmin = 6;
+        $xmax = 8;
+    }
+
+    if ($y < 3) {
+        $ymin = 0;
+        $ymax = 2;
+    } elsif ($y < 6) {
+        $ymin = 3;
+        $ymax = 5;
+    } else {
+        $ymin = 6;
+        $ymax = 8;
+    }
+
+    for (my $x = $xmin; $x <= $xmax; ++$x) {
+        for (my $y = $ymin; $y <= $ymax; ++$y) {
+            $$grid[$x][$y]{final} eq $digit and return 1;
+        }
+    }
+
+    return 0;
+}
+
+sub appears_in_column
+{
+    my $grid = shift;
+    my $digit = shift;
+    my $column = shift;
+
+    for (my $y = 0; $y < $bound; ++$y) {
+        $$grid[$column][$y]{final} eq $digit and return 1;
+    }
+
+    return 0;
+}
+
+sub appears_in_row
+{
+    my $grid = shift;
+    my $digit = shift;
+    my $row = shift;
+
+    defined $bound or die "bound not defined";
+    defined $row or die "row not defined";
+    defined $digit or die "digit not defined";
+
+    for (my $x = 0; $x < $bound; ++$x) {
+        $$grid[$x][$row]{final} eq $digit and return 1;
+    }
+
+    return 0;
+}
+
+sub potential_appears_in_block
+{
+    my $grid = shift;
+    my $digit = shift;
+    my $x = shift;
+    my $y = shift;
+
+    my @potentials;
+    my $xmax;
+    my $xmin;
+    my $ymax;
+    my $ymin;
+
+    if ($x < 3) {
+        $xmin = 0;
+        $xmax = 2;
+    } elsif ($x < 6) {
+        $xmin = 3;
+        $xmax = 5;
+    } else {
+        $xmin = 6;
+        $xmax = 8;
+    }
+
+    if ($y < 3) {
+        $ymin = 0;
+        $ymax = 2;
+    } elsif ($y < 6) {
+        $ymin = 3;
+        $ymax = 5;
+    } else {
+        $ymin = 6;
+        $ymax = 8;
+    }
+
+    for (my $x = $xmin; $x <= $xmax; ++$x) {
+        for (my $y = $ymin; $y <= $ymax; ++$y) {
+            foreach my $potential (@{$$grid[$x][$y]{potentials}}) {
+                return 1 if ($potential eq $digit);
+            }
+        }
+    }
+
+    return 0;
+}
+
+sub potential_appears_in_column
+{
+    my $grid = shift;
+    my $digit = shift;
+    my $column = shift;
+
+    for (my $y = 0; $y < $bound; ++$y) {
+            foreach my $potential (@{$$grid[$column][$y]{potentials}}) {
+                return 1 if ($potential eq $digit);
+            }
+    }
+
+    return 0;
+}
+
+sub potential_appears_in_row
+{
+    my $grid = shift;
+    my $digit = shift;
+    my $row = shift;
+
+    defined $bound or die "bound not defined";
+    defined $row or die "row not defined";
+    defined $digit or die "digit not defined";
+
+    for (my $x = 0; $x < $bound; ++$x) {
+            foreach my $potential (@{$$grid[$x][$row]{potentials}}) {
+                return 1 if ($potential eq $digit);
+            }
+    }
+
+    return 0;
+}
+
+sub print_grid
+{                               
+    my $grid = shift;
+    my $prefix = shift;
+
+    defined $prefix and print $prefix;
+
+    for (my $y = 0; $y < $bound; ++$y) { 
+        if ($y == 3 or $y == 6) {
+            print "-" x 21, "\n";
+        }
+        for (my $x = 0; $x < $bound; ++$x) {
+            if ($x == 3 or $x == 6) {
+                print "| ";
+            }
+            print "$$grid[$x][$y]{final} ";
+        }   
+        print "\n";
+    }
+    print "\n";
+}           
+
+# XXX use standard argument processing
+sub load_puzzle
+{
+    my @grid;
+    my $file;
+
+    my $arg = shift;
+    if (defined $arg) {
+        if ($arg eq "-v") {
+            $verbose = 1;
+            $file = shift;
+       } else {
+           $file = $arg;
+       }
+    }
+
+    if (not defined $file) {
+        die "No puzzle given";
+    }
+
+    # Fill in from file.
+    open PUZZLE, "<$file" or die "Couldn't open $file: $!";
+    my $y = 0;
+    while (my $line = <PUZZLE>) {
+        my $x = 0;
+
+        defined $line or die "insufficient quantity of input";
+        $line =~ /^-/ and next;
+
+        last if ($y >= $bound);
+
+        chomp($line);
+        foreach (split /\s/, $line) {
+            $_ =~ /\|/ and next;
+            $grid[$x++][$y]{final} = $_;
+        }
+        ++$y;
+        $x < $bound and die "insufficient input: x == $x";
+    }
+    $y < $bound and die "insufficient input: y == $y";
+    close PUZZLE;
+
+    return \@grid;
+}
+
+sub solve
+{
+    my $grid = shift;
+    my $loop = 0;
+    my $missing = find_missing($grid);
+
+    # Loop while unknown remain.
+    while ($missing) {
+        my $nailed = 0;
+
+        find_potentials($grid);
+        $nailed += find_trivial($grid);
+        $nailed += find_harder($grid);
+
+        $missing -= $nailed;
+
+        if ($verbose) {
+            ++$loop;
+            print "Nailed down total of $nailed in round $loop.\n\n";
+        }
+
+        if ($nailed == 0 and $missing > 0) {
+            last;
+        }
+    }
+
+    return $missing;
+}
+
+sub find_potentials
+{
+    my $grid = shift;
+
+    # Process each unknown in turn.
+    foreach my $x (0 .. $bound - 1) {
+        foreach my $y (0 .. $bound - 1) {
+            if ($$grid[$x][$y]{final} eq '.') {
+                $$grid[$x][$y]{potentials} = [];
+
+                # For each unknown, try each legal digit.
+                for (my $digit = 1; $digit <= $bound; ++$digit) {
+                    appears_in_row($grid, $digit, $y) and next;
+                    appears_in_column($grid, $digit, $x) and next;
+                    appears_in_block($grid, $digit, $x, $y) and next;
+                    push @{$$grid[$x][$y]{potentials}}, $digit;
+                }
+            }
+        }
+    }
+}
+
+sub find_trivial
+{
+    my $grid = shift;
+    my $nailed = 0;
+
+    # Identify cells with only one potential final value, and record
+    # the final value as such.
+    foreach my $x (0 .. $bound - 1) {
+        foreach my $y (0 .. $bound - 1) {
+            if ($$grid[$x][$y]{final} eq '.'
+                    and @{$$grid[$x][$y]{potentials}} == 1) {
+                $$grid[$x][$y]{final} = $$grid[$x][$y]{potentials}[0];
+                ++$nailed;
+
+                if ($verbose) {
+                    print "Found digit " . $$grid[$x][$y]{potentials}[0] .
+                            " at position " . ($x + 1) . "," .
+                            ($y + 1) . ".\n";
+                }
+            }
+        }
+    }
+
+    return $nailed;
+}
+
+sub find_harder
+{
+    my $grid = shift;
+    my $nailed = 0;
+
+    # If a potential only exists once in its row, column, and block, it is
+    # the final value, even if there are other potentials based on simple
+    # row, column, and block scans.
+    foreach my $x (0 .. $bound - 1) {
+        foreach my $y (0 .. $bound - 1) {
+            if ($$grid[$x][$y]{final} ne '.') {
+                next;
+            }
+            for (my $digit = 1; $digit <= $bound; ++$digit) {
+
+                # If the digit we're interested in shows up in the
+                # potentials for this cell...
+                if (grep { $_ == $digit } @{$$grid[$x][$y]{potentials}}) {
+
+                    # Don't bother with digits that have already been
+                    # finalized somewhere.
+                    # XXX might be less work to update potentials for
+                    # row, column, and block on each find. Ponder.
+                    if (appears_in_row($grid, $digit, $y)
+                            or appears_in_column($grid, $digit, $x)
+                            or appears_in_block($grid, $digit, $x, $y)) {
+                        next;
+                    }
+
+                    # Remove from potentials.
+                    @{$$grid[$x][$y]{potentials}} =
+                        grep { $_ != $digit } @{$$grid[$x][$y]{potentials}};
+
+                    # Check.
+                    if (not potential_appears_in_row($grid, $digit, $y) or
+                        not potential_appears_in_column($grid, $digit, $x) or
+                        not potential_appears_in_block($grid, $digit, $x, $y)) {
+
+                        # Potential doesn't exist anywhere but here.
+                        if ($verbose) {
+                            print "Found $digit at $x,$y\n";
+                        }
+                        $$grid[$x][$y]{final} = $digit;
+                        $$grid[$x][$y]{potentials} = [];
+                        ++$nailed;
+                        last;
+                    } else {
+                        # Not unique. Re-add.
+                        push @{$$grid[$x][$y]{potentials}}, $digit;
+                    }
+                }
+            }
+        }
+    }
+
+    return $nailed;
+}
+
+sub find_missing
+{
+    my $grid = shift;
+    my $missing = 0;
+
+    foreach my $x (0 .. $bound - 1) {
+        foreach my $y (0 .. $bound - 1) {
+            $$grid[$x][$y]{final} eq "." and ++$missing;
+        }
+    }
+
+    return $missing;
+}
+
+sub copy_puzzle
+{
+    my $grid = shift;
+    my @copy;
+
+    foreach my $x (0 .. $bound - 1) {
+        foreach my $y (0 .. $bound - 1) {
+            $copy[$x][$y]{final} = $$grid[$x][$y]{final};
+
+            # XXX Processing potentials is only useful if we want to copy a
+            # puzzle mid-solve, as each solve builds a new list of
+            # potentials.
+            foreach my $potential (@{$$grid[$x][$y]{potentials}}) {
+                push @{$copy[$x][$y]{potentials}}, $potential;
+            }
+        }
+    }
+
+    return \@copy;
+}
+
