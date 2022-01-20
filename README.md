@@ -1,5 +1,6 @@
 ## sudoku
 
+```
 work/perl/sudoku$ cat puzzle                          
 9 . 2 . . . . 3 1
 5 . . . . 1 2 . .
@@ -37,5 +38,6 @@ Completed grid:
 4 2 7 | 1 5 9 | 6 8 3
 1 5 6 | 4 3 8 | 9 2 7
 8 9 3 | 7 6 2 | 4 1 5
+```
 
 I'll throw in more parts at random. I seem to have a generator.
